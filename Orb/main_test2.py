@@ -334,7 +334,6 @@ class GameView(arcade.View):                   # Child class for the game of the
 
         self.enemy_speed = enemy_speed
 
-        self.ingame_timer = None
         self.level = None
         self.obstacle_count = None
 
@@ -350,11 +349,8 @@ class GameView(arcade.View):                   # Child class for the game of the
         self.score = None
         self.score_text = None
         self.score_updated1 = None
-        self.score_updated2 = None 
-        self.score_updated3 = None             
+        self.score_updated2 = None              
 
-        self.timer_text = None
-        self.level_text = None
         self.current_keys = None               # The list of key that are currently being pressed.
 
                  
@@ -371,36 +367,28 @@ class GameView(arcade.View):                   # Child class for the game of the
 
         self.enemy_speed = 4
 
-        self.ingame_timer = 0
         self.level = 1
         self.obstacle_count = 0
 
         self.score = 0
         self.score_updated1 = False              # Score shouldn t update untill the player passe the obstacle
         self.score_updated2 = False
-        self.score_updated3 = False
         self.score_text = arcade.Text(f"SCORE: {self.score}", 
-                                      5, WINDOW_HEIGHT - 28, 
+                                      5, WINDOW_HEIGHT - 15, 
                                       arcade.color.BROWN, 9, bold=True)
-        
-        self.timer_text = arcade.Text(f"TIME: {self.ingame_timer}",
-                                     5, WINDOW_HEIGHT - 13,
-                                     arcade.color.BROWN, 9, bold=True)
         self.current_keys = set()
 
         
     def on_update(self, delta_time):            # Event handler. Updates the state on the game objects.
 
-            self.ingame_timer += delta_time
-            self.timer_text.text = f"TIME: {self.ingame_timer:.2f}"
+            self.player_sprite.update()             # Calling the update function of the player class to update its state.
 
-            self.player_sprite.update()             # Calling the update function of the player class to update its position.
             
-            self.leveling_mode()                    # Checks if the conditions for levelling are met.
+            self.leveling_mode()
             
-            self.enemy_spawns()                     # Checks if the conditions for enemy spawns are met.
+            self.enemy_spawns()
             
-            self.scoring()                          # Checks if the conditions for updating the score are met.
+            self.scoring()
 
             self.enemy_sprite_list1.update()
             self.enemy_sprite_list2.update()
@@ -417,10 +405,7 @@ class GameView(arcade.View):                   # Child class for the game of the
         self.player_sprite.draw()               # Draws the player sprite on the screen.
         self.enemy_sprite_list1.draw()
         self.enemy_sprite_list2.draw()
-        
-        self.timer_text.draw()
         self.score_text.draw()
-        
     
   
     def on_key_press(self, key, modifier):                   # Reads key presses.
@@ -443,34 +428,33 @@ class GameView(arcade.View):                   # Child class for the game of the
 
     def on_key_release(self, key, modifier):                 # Reads key releases.
         
-        if key in self.current_keys:
-            self.current_keys.remove(key)
+        
+            if key in self.current_keys:
+                self.current_keys.remove(key)
 
-        if (key == arcade.key.A or key == arcade.key.D) \
-            and (arcade.key.A not in self.current_keys and arcade.key.D not in self.current_keys):  # Handles realease and press of multiple keys at once
-            self.player_sprite.change_x = 0                                                         # allowing the player to move after a key release if 
-        elif key == arcade.key.A and arcade.key.D in self.current_keys:                             # another key is still being pressed.
-            self.player_sprite.change_x = player_speed 
-        elif key == arcade.key.D and arcade.key.A in self.current_keys:
-            self.player_sprite.change_x = -player_speed 
+            if (key == arcade.key.A or key == arcade.key.D) \
+                and (arcade.key.A not in self.current_keys and arcade.key.D not in self.current_keys):  # Handles realease and press of multiple keys at once
+                self.player_sprite.change_x = 0                                                         # allowing the player to move after a key release if 
+            elif key == arcade.key.A and arcade.key.D in self.current_keys:                             # another key is still being pressed.
+                self.player_sprite.change_x = player_speed 
+            elif key == arcade.key.D and arcade.key.A in self.current_keys:
+                self.player_sprite.change_x = -player_speed 
 
-        if (key == arcade.key.S or key == arcade.key.W) \
-            and (arcade.key.S not in self.current_keys and arcade.key.W not in self.current_keys):
-            self.player_sprite.change_y = 0
-        elif key == arcade.key.S and arcade.key.W in self.current_keys:
-            self.player_sprite.change_y = player_speed 
-        elif key == arcade.key.W and arcade.key.S in self.current_keys:
+            if (key == arcade.key.S or key == arcade.key.W) \
+                and (arcade.key.S not in self.current_keys and arcade.key.W not in self.current_keys):
+                self.player_sprite.change_y = 0
+            elif key == arcade.key.S and arcade.key.W in self.current_keys:
+                self.player_sprite.change_y = player_speed 
+            elif key == arcade.key.W and arcade.key.S in self.current_keys:
                 self.player_sprite.change_y = -player_speed 
     
 
     def enemy_spawns(self):
 
-        if (len(self.enemy_sprite_list1) == 0 and len(self.enemy_sprite_list2) == 0) \
-          or (len(self.enemy_sprite_list1) == 0 and self.enemy_sprite.center_y <= WINDOW_HEIGHT/2):
-            
+        if len(self.enemy_sprite_list1) == 0:
             enemy_count1 = random.randint(18,35)             # To set a random number of enemies to spawn (first row)
             self.obstacle_count += 1
-            print("row 1")
+
             for _ in range(enemy_count1):                    # Populating the first row on enemies.
                 self.enemy_sprite = Enemies(self.enemy_speed)
                 self.enemy_sprite_list1.append(self.enemy_sprite)
@@ -486,7 +470,7 @@ class GameView(arcade.View):                   # Child class for the game of the
             if enemy1.center_y <= WINDOW_HEIGHT/2 and len(self.enemy_sprite_list2) == 0: # When the first row of enemy is at half screen (500) we create and spawn the second row.
                 enemy_count2 = random.randint(18,35)            # To set a random number of enemies to spawn (second row)
                 self.obstacle_count += 1
-                print("row 2")
+                
                 for _ in range(enemy_count2):                   # Populating the second row of enemies. 
                     self.enemy_sprite = Enemies(self.enemy_speed) 
                     self.enemy_sprite_list2.append(self.enemy_sprite)
@@ -500,12 +484,12 @@ class GameView(arcade.View):                   # Child class for the game of the
             if enemy1.center_y < 0:              # When the obstacles's center is below the screen 
                 self.enemy_sprite_list1.clear()  # clear the sprite list.
                 self.score_updated1 = False       # Current row's score can be updated again. 
-
+        
         for enemy2 in self.enemy_sprite_list2:
-            if enemy2.center_y < 0:
-                    self.enemy_sprite_list2.clear()
-                    self.score_updated2 = False       # Current row's score can be updated again.
 
+            if enemy2.center_y < 0:
+                self.enemy_sprite_list2.clear()
+                self.score_updated2 = False       # Current row's score can be updated again.
 
 
     def collisions(self):
@@ -516,19 +500,14 @@ class GameView(arcade.View):                   # Child class for the game of the
 
     def leveling_mode(self):
 
-        if self.level_mode_time:
-            if self.ingame_timer >= self.level * 30:
-                self.enemy_speed += 0.5
+        if self.level_mode_score:
+            if self.score >= self.level * 200:
+                self.enemy_speed = self.enemy_speed + 0.5
                 self.level += 1
         
         elif self.level_mode_obstacles:
             if self.obstacle_count >= self.level * 10:
-                self.enemy_speed += + 0.5
-                self.level += 1
-
-        elif self.level_mode_score:
-            if self.score >= self.level * 200:
-                self.enemy_speed += + 0.5
+                self.enemy_speed = self.enemy_speed + 0.5
                 self.level += 1
 
 
@@ -545,12 +524,6 @@ class GameView(arcade.View):                   # Child class for the game of the
             if self.player_sprite.center_y > enemy2.center_y and self.score_updated2 == False:
                 self.score += len(self.enemy_sprite_list2)
                 self.score_updated2 = True
-        
-        for enemy3 in self.enemy_sprite_list3:
-
-            if self.player_sprite.center_y > enemy3.center_y and self.score_updated3 == False:
-                self.score += len(self.enemy_sprite_list3)
-                self.score_updated3 == True
             
             
         self.score_text.text = f"SCORE: {self.score}"  # Updating the score widget on screenc   
@@ -569,4 +542,3 @@ def main():
 
 if __name__ == "__main__":          # Checks if the program is being run deirectly from the file. Won t run if the file is imported
     main()
-
