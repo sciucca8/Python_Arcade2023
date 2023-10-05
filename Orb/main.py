@@ -3,6 +3,7 @@ import arcade.gui
 import json
 from arcade import SpriteSolidColor
 import random
+import math
 from pathlib import Path
 
 working_directory = Path(__file__).absolute().parent
@@ -50,13 +51,31 @@ class Enemies(arcade.Sprite):
                                                        arcade.color.BLUEBERRY, 
                                                        outer_alpha=255)
         self.enemy_speed = enemy_speed
-
         
+
     def update(self):
 
         self.center_y -= self.enemy_speed   # Updates the player movement by the enemy speed.
 
 
+
+class Coin(arcade.Sprite):
+    def __init__(self, enemy_collision_list):
+        super().__init__()
+
+        self.texture = arcade.make_circle_texture(10, arcade.color.GOLD) 
+
+        self.enemy_collision_list = enemy_collision_list
+        self.physics_engine = arcade.PhysicsEngineSimple(self, self.enemy_collision_list)
+
+
+    def update(self):
+        
+        self.center_x += self.change_x
+        self.center_y += self.change_y
+        self.physics_engine.update()
+
+        
 
 class MainMenuView(arcade.View):
     def __init__(self, level_mode_time=None, level_mode_obstacle=None, level_mode_score=None, enemy_speed=4):
@@ -65,7 +84,9 @@ class MainMenuView(arcade.View):
         self.level_mode_time = level_mode_time
         self.level_mode_obstacle = level_mode_obstacle
         self.level_mode_score = level_mode_score
+        self.enemy_speed = enemy_speed
         
+
     def setup(self):
         self.manager = arcade.gui.UIManager()
         self.manager.enable()
@@ -122,13 +143,12 @@ class MainMenuView(arcade.View):
 
         self.level_mode_time = True
         
-        game_view = GameView(self.level_mode_obstacle, None, None)
+        game_view = GameView(self.level_mode_time, None, None)
         game_view.setup()
         self.manager.disable()
         self.window.show_view(game_view)
         
     
-
     def go_play_obstacle(self, event):
         
         self.level_mode_obstacle = True
@@ -155,6 +175,8 @@ class PauseView(arcade.View):
         super().__init__()
 
         self.gameview_reference = gameview_reference
+    
+    def setup(self):
 
         self.manager = arcade.gui.UIManager()
         self.manager.enable()
@@ -174,9 +196,6 @@ class PauseView(arcade.View):
         self.button_mainmenu = arcade.gui.UIFlatButton(WINDOW_WIDTH/2, 50, 
                                                        width=200, text="MAIN MENU",
                                                        style=self.mainmenu_button_style)
-        
-        
-
         self.manager.add(self.button_mainmenu)
 
         self.leaderboard_list = list()         # Top scores leaderboard list holding the json file data.
@@ -246,13 +265,16 @@ class GameOverView(arcade.View):
     def __init__(self, score, level_mode_time=None, level_mode_obstacles=None, level_mode_score=None, enemy_speed = 4):
         super().__init__()
 
+        self.score = score
+
         self.level_mode_time = level_mode_time
         self.level_mode_obstacles = level_mode_obstacles
         self.level_mode_score = level_mode_score
 
         self.enemy_speed = enemy_speed
 
-        self.score = score
+
+    def setup(self):
 
         self.leaderboard_list = list()         # Top scores leaderboard list holding the json file data.
         try:
@@ -276,6 +298,7 @@ class GameOverView(arcade.View):
         
         arcade.set_viewport(0, WINDOW_WIDTH, 0, WINDOW_HEIGHT)
 
+
     def on_draw(self):
 
         self.clear()
@@ -287,7 +310,6 @@ class GameOverView(arcade.View):
                                           self.name_input.center_y + self.name_input.height/2, 
                                           self.name_input.center_y - self.name_input.height/4, 
                                           arcade.color.FLORAL_WHITE)
-
         self.manager.draw()
 
         arcade.draw_text("GAME OVER", 
@@ -302,11 +324,13 @@ class GameOverView(arcade.View):
                          WINDOW_WIDTH/2, WINDOW_HEIGHT - 800, 
                          arcade.color.BLACK, 40, 
                          anchor_x="center")
+        
     
     def on_key_press(self, key, modifier):
         
         if key == arcade.key.ENTER and self.name_input.text:         # If you press enter and you ve written (name of the player) in the input box
             player_name = self.name_input.text 
+
             if len(self.leaderboard_list) < 10 or self.score > any([value for name, value in self.leaderboard_list]):
             
                 self.leaderboard_list.append({player_name: self.score})
@@ -317,7 +341,7 @@ class GameOverView(arcade.View):
                 file.close()
 
         if key == arcade.key.SPACE:
-            game_view = GameView(self.enemy_speed, self.level_mode_time, self.level_mode_obstacles, self.level_mode_score)
+            game_view = GameView(self.level_mode_time, self.level_mode_obstacles, self.level_mode_score, self.enemy_speed)
             game_view.setup()
             self.manager.disable()
             self.window.show_view(game_view)  # Go back to the game.
@@ -325,7 +349,7 @@ class GameOverView(arcade.View):
 
                   
 class GameView(arcade.View):                   # Child class for the game of the parent class View.
-    def __init__(self, level_mode_time=None, level_mode_obstacles=None, level_mode_score=None, enemy_speed = 4):    # Set the parameters for the new class. 
+    def __init__(self, level_mode_time=None, level_mode_obstacles=None, level_mode_score=None, enemy_speed=4, coin_speed=4):    # Set the parameters for the new class. 
         super().__init__()   # With super we pair the parameters of the new class with the View class.
                                                             # Create sprites and sprite lists here.
         self.level_mode_time = level_mode_time
@@ -333,25 +357,31 @@ class GameView(arcade.View):                   # Child class for the game of the
         self.level_mode_score = level_mode_score
 
         self.enemy_speed = enemy_speed
+        self.coin_speed = coin_speed
 
         self.ingame_timer = None
         self.level = None
         self.obstacle_count = None
 
         self.player_sprite = None
+        
+        self.coin_sprite = None
+        self.coin_list = None
 
         self.enemy_sprite = None                
         self.enemy_sprite_list1 = None
         self.enemy_sprite_list2 = None
-        self.enemy_sprite_list3 = None
         self.enemy_collision_list = None
 
+        self.physics_engine = None
 
         self.score = None
         self.score_text = None
         self.score_updated1 = None
         self.score_updated2 = None 
-        self.score_updated3 = None             
+        self.score_updated3 = None          
+
+        self.coin_spawned = None   
 
         self.timer_text = None
         self.level_text = None
@@ -366,10 +396,13 @@ class GameView(arcade.View):                   # Child class for the game of the
 
         self.enemy_sprite_list1 = arcade.SpriteList()
         self.enemy_sprite_list2 = arcade.SpriteList()
-        self.enemy_sprite_list3 = arcade.SpriteList()
-        self.enemy_collision_list = [self.enemy_sprite_list1, self.enemy_sprite_list2, self.enemy_sprite_list3]
+        self.enemy_collision_list = [self.enemy_sprite_list1, self.enemy_sprite_list2]
+
+        self.coin_list = arcade.SpriteList()
 
         self.enemy_speed = 4
+        
+        self.coin_spawned = False
 
         self.ingame_timer = 0
         self.level = 1
@@ -378,7 +411,6 @@ class GameView(arcade.View):                   # Child class for the game of the
         self.score = 0
         self.score_updated1 = False              # Score shouldn t update untill the player passe the obstacle
         self.score_updated2 = False
-        self.score_updated3 = False
         self.score_text = arcade.Text(f"SCORE: {self.score}", 
                                       5, WINDOW_HEIGHT - 28, 
                                       arcade.color.BROWN, 9, bold=True)
@@ -386,24 +418,37 @@ class GameView(arcade.View):                   # Child class for the game of the
         self.timer_text = arcade.Text(f"TIME: {self.ingame_timer}",
                                      5, WINDOW_HEIGHT - 13,
                                      arcade.color.BROWN, 9, bold=True)
+        
+        self.level_text = arcade.Text(f"LEVEL: {self.level}",
+                                      5, WINDOW_HEIGHT - 43,
+                                      arcade.color.BROWN, 9, bold=True)
+                                     
         self.current_keys = set()
 
         
     def on_update(self, delta_time):            # Event handler. Updates the state on the game objects.
+            
+            if self.physics_engine:
+                self.physics_engine.update()
 
             self.ingame_timer += delta_time
             self.timer_text.text = f"TIME: {self.ingame_timer:.2f}"
+            self.level_text.text = f"LEVEL: {self.level}"
 
             self.player_sprite.update()             # Calling the update function of the player class to update its position.
             
             self.leveling_mode()                    # Checks if the conditions for levelling are met.
             
             self.enemy_spawns()                     # Checks if the conditions for enemy spawns are met.
+
+            self.coin_spawns()
+            self.coin_behavior()
             
             self.scoring()                          # Checks if the conditions for updating the score are met.
 
             self.enemy_sprite_list1.update()
             self.enemy_sprite_list2.update()
+            self.coin_list.update()
 
             self.collisions()
 
@@ -418,27 +463,31 @@ class GameView(arcade.View):                   # Child class for the game of the
         self.enemy_sprite_list1.draw()
         self.enemy_sprite_list2.draw()
         
+        if self.coin_list:
+            self.coin_list.draw()
+        
         self.timer_text.draw()
         self.score_text.draw()
+        self.level_text.draw()
         
     
-  
     def on_key_press(self, key, modifier):                   # Reads key presses.
 
-        
-            self.current_keys.add(key)
+        self.current_keys.add(key)
 
-            if key == arcade.key.ESCAPE:
-                self.window.show_view(PauseView(self))
+        if key == arcade.key.ESCAPE:
+            pause_view = PauseView(self)
+            pause_view.setup()
+            self.window.show_view(pause_view)
             
-            if key == arcade.key.A:                              # Setting ASDW directional keys for player movement.
-                self.player_sprite.change_x = -player_speed 
-            if key == arcade.key.D:
-                self.player_sprite.change_x = player_speed 
-            if key == arcade.key.S:
-                self.player_sprite.change_y = -player_speed 
-            if key == arcade.key.W: 
-                self.player_sprite.change_y = player_speed
+        if key == arcade.key.A:                              # Setting ASDW directional keys for player movement.
+            self.player_sprite.change_x = -player_speed 
+        if key == arcade.key.D:
+            self.player_sprite.change_x = player_speed 
+        if key == arcade.key.S:
+            self.player_sprite.change_y = -player_speed 
+        if key == arcade.key.W: 
+            self.player_sprite.change_y = player_speed
     
 
     def on_key_release(self, key, modifier):                 # Reads key releases.
@@ -464,69 +513,119 @@ class GameView(arcade.View):                   # Child class for the game of the
     
 
     def enemy_spawns(self):
-
+        # if both lists are empty (only at the start of the game) 
+        # or if first list is empty (it reached the bottom of the screen and has been cleared) and the last sprite created (which belongs to the second row) is at or past the screen center, spawn the first row
         if (len(self.enemy_sprite_list1) == 0 and len(self.enemy_sprite_list2) == 0) \
-          or (len(self.enemy_sprite_list1) == 0 and self.enemy_sprite.center_y <= WINDOW_HEIGHT/2):
-            
-            enemy_count1 = random.randint(18,35)             # To set a random number of enemies to spawn (first row)
+            or (len(self.enemy_sprite_list1) == 0 and self.enemy_sprite.center_y <= WINDOW_HEIGHT/2):
+            enemy_count1 = random.randint(18,20)             # To set a random number of enemies to spawn (first row)
             self.obstacle_count += 1
-            print("row 1")
-            for _ in range(enemy_count1):                    # Populating the first row on enemies.
+
+            for _ in range(enemy_count1):                    # Populating the first row of enemies.
                 self.enemy_sprite = Enemies(self.enemy_speed)
                 self.enemy_sprite_list1.append(self.enemy_sprite)
             
             for enemy in self.enemy_sprite_list1:            # Setting the positions of the first row of enemies.
                 enemy.center_x = random.randrange(0 + enemy_radius/2, WINDOW_WIDTH - enemy_radius/2, enemy_radius)
                 enemy.center_y = WINDOW_HEIGHT + enemy_radius*2
+
                 while arcade.check_for_collision_with_list(enemy, self.enemy_sprite_list1): # So that enemies don t spawn overlapped.
                     enemy.center_x = random.randrange(0 + enemy_radius/2, WINDOW_WIDTH - enemy_radius/2, enemy_radius)
-        
-        for enemy1 in self.enemy_sprite_list1:
+                    
+        for enemy1 in self.enemy_sprite_list1[0:1]:
             
             if enemy1.center_y <= WINDOW_HEIGHT/2 and len(self.enemy_sprite_list2) == 0: # When the first row of enemy is at half screen (500) we create and spawn the second row.
-                enemy_count2 = random.randint(18,35)            # To set a random number of enemies to spawn (second row)
+                enemy_count2 = random.randint(18,20)            # To set a random number of enemies to spawn (second row)
                 self.obstacle_count += 1
-                print("row 2")
+
                 for _ in range(enemy_count2):                   # Populating the second row of enemies. 
                     self.enemy_sprite = Enemies(self.enemy_speed) 
                     self.enemy_sprite_list2.append(self.enemy_sprite)
-               
+
                 for enemy2 in self.enemy_sprite_list2:          # Setting the positions of the second row of enemies.
                     enemy2.center_x = random.randrange(0 + enemy_radius/2, WINDOW_WIDTH - enemy_radius/2, enemy_radius)
                     enemy2.center_y = WINDOW_HEIGHT + enemy_radius*2
+
                     while arcade.check_for_collision_with_list(enemy2, self.enemy_sprite_list2): # So that enemies don t spawn overlapped.
                         enemy2.center_x = random.randrange(0 + enemy_radius/2, WINDOW_WIDTH - enemy_radius/2, enemy_radius)
                     
             if enemy1.center_y < 0:              # When the obstacles's center is below the screen 
+                for enemy1 in self.enemy_sprite_list1:
+                    del enemy1
                 self.enemy_sprite_list1.clear()  # clear the sprite list.
                 self.score_updated1 = False       # Current row's score can be updated again. 
 
-        for enemy2 in self.enemy_sprite_list2:
+        for enemy2 in self.enemy_sprite_list2[0:1]:
             if enemy2.center_y < 0:
-                    self.enemy_sprite_list2.clear()
-                    self.score_updated2 = False       # Current row's score can be updated again.
+                for enemy2 in self.enemy_sprite_list2:
+                    del enemy2
+                self.enemy_sprite_list2.clear()
+                self.score_updated2 = False       # Current row's score can be updated again.
+                    
+
+    def coin_spawns(self):
+
+        if len(self.coin_list) < self.level:
+
+            for _ in range(self.level - len(self.coin_list)):
+                self.coin_sprite = Coin(self.enemy_collision_list)
+                self.coin_list.append(self.coin_sprite)
+                print(len(self.coin_list))
+                self.coin_sprite.center_x = random.randint(0 + 6, WINDOW_WIDTH - 6)
+                self.coin_sprite.center_y = random.randint(0 + 6, WINDOW_HEIGHT - 6)
+                self.coin_sprite.change_x = round(random.random() * self.coin_speed, 1) * random.choice([-1, 1])
+                self.coin_sprite.change_y = round(math.sqrt((self.coin_speed ** 2) - self.coin_sprite.change_x ** 2), 1) * random.choice([-1, 1])
 
 
+    def coin_behavior(self):
 
+        for coin in self.coin_list:
+
+                if coin.left <= 0 or coin.right >= WINDOW_WIDTH:
+                    coin.change_x = -coin.change_x
+
+                if coin.bottom <= 0 or coin.top >= WINDOW_HEIGHT:
+                    coin.change_y = -coin.change_y
+
+                if arcade.check_for_collision(self.player_sprite, coin):
+                    print(coin.top, self.enemy_sprite.bottom)
+                    self.score += 25
+                    self.coin_list.remove(coin)
+                
+                if coin.center_y < -10:
+                    self.coin_list.remove(coin)
+
+            
     def collisions(self):
 
         if arcade.check_for_collision_with_lists(self.player_sprite, self.enemy_collision_list): # Checking for collision between player and falling obstacles.
-            self.window.show_view(GameOverView(self.score, self.level_mode_time, self.level_mode_obstacles, self.level_mode_score))
+            
+            for enemy1 in self.enemy_sprite_list1:
+                del enemy1
+            
+            for enemy2 in self.enemy_sprite_list2:
+                del enemy2
+            
+            del self.player_sprite
+            del self.coin_sprite
+            
+            gameover_view = GameOverView(self.score, self.level_mode_time, self.level_mode_obstacles, self.level_mode_score)
+            gameover_view.setup()
+            self.window.show_view(gameover_view)
     
 
     def leveling_mode(self):
 
-        if self.level_mode_time:
-            if self.ingame_timer >= self.level * 30:
-                self.enemy_speed += 0.5
-                self.level += 1
+        if self.level_mode_time:                                       # If level_mode_time is set to True 
+            if self.ingame_timer >= self.level * 30:                   # every 30 seconds
+                self.enemy_speed += 0.5                                # enemy speed gets increased
+                self.level += 1                                        # as the game level goes up by 1.
         
-        elif self.level_mode_obstacles:
+        elif self.level_mode_obstacles:                                # Every 30 seconds you go up a level
             if self.obstacle_count >= self.level * 10:
                 self.enemy_speed += + 0.5
                 self.level += 1
 
-        elif self.level_mode_score:
+        elif self.level_mode_score:                                    # Every 200 points you go up a level
             if self.score >= self.level * 200:
                 self.enemy_speed += + 0.5
                 self.level += 1
@@ -544,20 +643,14 @@ class GameView(arcade.View):                   # Child class for the game of the
 
             if self.player_sprite.center_y > enemy2.center_y and self.score_updated2 == False:
                 self.score += len(self.enemy_sprite_list2)
-                self.score_updated2 = True
-        
-        for enemy3 in self.enemy_sprite_list3:
-
-            if self.player_sprite.center_y > enemy3.center_y and self.score_updated3 == False:
-                self.score += len(self.enemy_sprite_list3)
-                self.score_updated3 == True
-            
+                self.score_updated2 = True        
             
         self.score_text.text = f"SCORE: {self.score}"  # Updating the score widget on screenc   
         
 
 
 def main():
+
     window = arcade.Window(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE, center_window=True)
      
     main_menu = MainMenuView()
@@ -580,8 +673,7 @@ if __name__ == "__main__":          # Checks if the program is being run deirect
   """
 
 """Where we left off:  
-- try to put every self.variable declaration into setup, variables in __init__ should = None
-- implement game levels
+- save coin.chage_y. If change_y == 0: change_y = -saved_change_y
 - aggiungere ostacoli fissi?
-- add the leaderboard to the pause and game over screen
+- add the leaderboard to the game over screen
 """
